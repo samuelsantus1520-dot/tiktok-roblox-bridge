@@ -4,6 +4,9 @@ const { TikTokLiveConnection, WebcastEvent } = require('tiktok-live-connector');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- ESSENCIAL: Permite que o servidor receba dados em JSON do Roblox ---
+app.use(express.json());
+
 // --- 1. LISTA DE CLIENTES AUTORIZADOS (WHITELIST) ---
 const whitelistAtiva = [
     "souosam25", // O seu próprio perfil para testes
@@ -14,6 +17,9 @@ const whitelistAtiva = [
 // Dicionários para guardar as conexões e filas de cada streamer separadamente
 const activeConnections = {};
 const eventQueues = {};
+
+// Mapeamento opcional para guardar qual Roblox User ID está ligado a qual TikTok
+const playerTikTokLinks = {};
 
 // --- REGRAS DE ANIME E BALANCEAMENTO COMPLETO ---
 const giftToAnimeAction = {
@@ -84,6 +90,32 @@ function getOrConnectStreamer(username) {
     return eventQueues[username];
 }
 
+// --- ROTA PARA RECEBER O VINCULO DO ROBLOX ---
+app.post('/vincular-usuario', (req, res) => {
+    const { robloxUserId, robloxUserName, tiktokUser } = req.body;
+
+    if (!tiktokUser) {
+        return res.status(400).json({ error: "Usuário do TikTok não fornecido." });
+    }
+
+    // Limpa o @ se o jogador digitou com ele (ex: "@souosam25" vira "souosam25")
+    const cleanTiktok = tiktokUser.replace(/^@/, "").toLowerCase();
+
+    // Valida se está na whitelist
+    if (!whitelistAtiva.includes(cleanTiktok)) {
+        console.log(`[Vínculo Negado] @${cleanTiktok} tentou conectar, mas não está na whitelist.`);
+        return res.status(403).json({ error: "Usuário não autorizado na whitelist." });
+    }
+
+    playerTikTokLinks[robloxUserId] = cleanTiktok;
+    console.log(`[Vínculo Sucesso] Jogador do Roblox ${robloxUserName} vinculou o TikTok: @${cleanTiktok}`);
+
+    // Já inicia a conexão com a live do TikTok preventivamente
+    getOrConnectStreamer(cleanTiktok);
+
+    res.json({ success: true, message: `Vinculado a @${cleanTiktok} com sucesso!` });
+});
+
 // --- ROTA DE EVENTOS PARA O ROBLOX (PROTEGIDA POR WHITELIST) ---
 app.get('/events', (req, res) => {
     const username = req.query.user;
@@ -93,13 +125,13 @@ app.get('/events', (req, res) => {
     }
 
     // --- 2. TRAVA DE SEGURANÇA DA MENSALIDADE ---
-    const usernameLower = username.toLowerCase();
+    const usernameLower = username.toLowerCase().replace(/^@/, "");
     if (!whitelistAtiva.includes(usernameLower)) {
         console.log(`[Bloqueio de Segurança] Acesso negado para: @${username} (Não está na whitelist)`);
         return res.status(403).json({ error: "Acesso negado. Assinatura pendente ou expirada." });
     }
 
-    const queue = getOrConnectStreamer(username);
+    const queue = getOrConnectStreamer(usernameLower);
     
     if (!queue) {
         return res.json({ events: [] });
@@ -107,12 +139,12 @@ app.get('/events', (req, res) => {
 
     res.json({ events: queue });
     // Limpa a fila apenas daquele usuário específico após enviar
-    eventQueues[username] = [];
+    eventQueues[usernameLower] = [];
 });
 
 // --- ROTA DE SIMULAÇÃO ---
 app.get('/simulate', (req, res) => {
-    const username = req.query.user || "souosam25";
+    const username = (req.query.user || "souosam25").replace(/^@/, "");
     const type = req.query.type || "gift"; // Permite escolher entre 'gift' ou 'follow'
     const queue = getOrConnectStreamer(username);
 
