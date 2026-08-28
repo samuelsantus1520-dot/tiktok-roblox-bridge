@@ -4,6 +4,13 @@ const { TikTokLiveConnection, WebcastEvent } = require('tiktok-live-connector');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- 1. LISTA DE CLIENTES AUTORIZADOS (WHITELIST) ---
+const whitelistAtiva = [
+    "souosam25", // O seu próprio perfil para testes
+    // Adicione os @ dos seus clientes pagantes aqui embaixo no futuro:
+    // "cliente_exemplo",
+];
+
 // Dicionários para guardar as conexões e filas de cada streamer separadamente
 const activeConnections = {};
 const eventQueues = {};
@@ -77,13 +84,19 @@ function getOrConnectStreamer(username) {
     return eventQueues[username];
 }
 
-// --- ROTA DE EVENTOS PARA O ROBLOX ---
-// O Roblox agora precisa mandar o usuário: /events?user=nomedostreamer
+// --- ROTA DE EVENTOS PARA O ROBLOX (PROTEGIDA POR WHITELIST) ---
 app.get('/events', (req, res) => {
     const username = req.query.user;
     
     if (!username) {
         return res.status(400).json({ error: "Parâmetro 'user' ausente." });
+    }
+
+    // --- 2. TRAVA DE SEGURANÇA DA MENSALIDADE ---
+    const usernameLower = username.toLowerCase();
+    if (!whitelistAtiva.includes(usernameLower)) {
+        console.log(`[Bloqueio de Segurança] Acesso negado para: @${username} (Não está na whitelist)`);
+        return res.status(403).json({ error: "Acesso negado. Assinatura pendente ou expirada." });
     }
 
     const queue = getOrConnectStreamer(username);
