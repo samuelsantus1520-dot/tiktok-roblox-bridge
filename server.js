@@ -1,5 +1,6 @@
 const express = require('express');
 const { TikTokLiveConnection, WebcastEvent } = require('tiktok-live-connector');
+const readline = require('readline');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -97,10 +98,8 @@ app.post('/vincular-usuario', (req, res) => {
         return res.status(400).json({ error: "Usuário do TikTok não fornecido." });
     }
 
-    // Limpa o @ se o jogador digitou com ele (ex: "@souosam25" vira "souosam25")
     const cleanTiktok = tiktokUser.replace(/^@/, "").toLowerCase();
 
-    // Valida se está na whitelist
     if (!whitelistAtiva.includes(cleanTiktok)) {
         console.log(`[Vínculo Negado] @${cleanTiktok} tentou conectar, mas não está na whitelist.`);
         return res.status(403).json({ error: "Usuário não autorizado na whitelist." });
@@ -109,7 +108,6 @@ app.post('/vincular-usuario', (req, res) => {
     playerTikTokLinks[robloxUserId] = cleanTiktok;
     console.log(`[Vínculo Sucesso] Jogador do Roblox ${robloxUserName} vinculou o TikTok: @${cleanTiktok}`);
 
-    // Já inicia a conexão com a live do TikTok preventivamente
     getOrConnectStreamer(cleanTiktok);
 
     res.json({ success: true, message: `Vinculado a @${cleanTiktok} com sucesso!` });
@@ -123,7 +121,6 @@ app.get('/events', (req, res) => {
         return res.status(400).json({ error: "Parâmetro 'user' ausente." });
     }
 
-    // --- 2. TRAVA DE SEGURANÇA DA MENSALIDADE ---
     const usernameLower = username.toLowerCase().replace(/^@/, "");
     if (!whitelistAtiva.includes(usernameLower)) {
         console.log(`[Bloqueio de Segurança] Acesso negado para: @${username} (Não está na whitelist)`);
@@ -137,14 +134,13 @@ app.get('/events', (req, res) => {
     }
 
     res.json({ events: queue });
-    // Limpa a fila apenas daquele usuário específico após enviar
     eventQueues[usernameLower] = [];
 });
 
 // --- ROTA DE SIMULAÇÃO ---
 app.get('/simulate', (req, res) => {
     const username = (req.query.user || "souosam25").replace(/^@/, "");
-    const type = req.query.type || "gift"; // Permite escolher entre 'gift' ou 'follow'
+    const type = req.query.type || "gift";
     const queue = getOrConnectStreamer(username);
 
     if (!queue) {
@@ -177,6 +173,29 @@ app.get('/simulate', (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log('[Bridge Server] Rodando na porta ' + PORT);
+// --- CONFIGURAÇÃO DA LEITURA DO TERMINAL E INÍCIO DO SERVIDOR ---
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+rl.question('Digite o seu @ do TikTok para iniciar a Bridge: ', (tiktokUsername) => {
+    const cleanUsername = tiktokUsername.trim().replace(/^@/, "").toLowerCase();
+
+    if (!cleanUsername) {
+        console.log('❌ Nome de usuário inválido!');
+        process.exit(1);
+    }
+
+    rl.close();
+
+    app.listen(PORT, () => {
+        console.log(`\n========================================`);
+        console.log(`[Bridge Server] Rodando na porta ${PORT}`);
+        console.log(`[Bridge Server] Canal configurado: @${cleanUsername}`);
+        console.log(`========================================\n`);
+        
+        // Já inicia a conexão com a live dele de antemão se quiser
+        getOrConnectStreamer(cleanUsername);
+    });
 });
