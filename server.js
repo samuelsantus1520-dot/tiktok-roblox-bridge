@@ -24,14 +24,13 @@ const playerTikTokLinks = {};
 // --- REGRAS DE ANIME E BALANCEAMENTO COMPLETO ---
 const giftToAnimeAction = {
     "rosa": { action: "spawn", prefab: "Luffy", message: "ROSA! Luffy Gear 5 (+15)!" },
-    "tiktok": { action: "spawn", prefab: "Sonic", message: "TIKTOK! Sonic te jogou para trás (-15)!" },
+    "tiktok": { action: "spawn", prefab: "MaoPoppy", message: "TIKTOK! Mão do Poppy Playtime te jogou para trás (-15)!" },
     "dedo de coracao": { action: "spawn", prefab: "Goku", message: "DEDO DE CORAÇÃO! Goku Kamehameha (+90)!" },
     "carinha verde": { action: "spawn", prefab: "Meteoro", message: "CARINHA VERDE! Meteoro de Pégasus (-90)!" },
     "rosquinha": { action: "spawn", prefab: "Rasengan", message: "ROSQUINHA! Naruto Rasengan supremo (+450)!" },
     "capivara": { action: "spawn", prefab: "Thor", message: "CAPIVARA! Machado do Thor (-450)!" },
     "bone": { action: "spawn", prefab: "Gojo", message: "BONÉ! Gojo Expansão de Domínio (VITÓRIA)!" },
-    "chapeu": { action: "spawn", prefab: "SukunaFinger", message: "CHAPÉU! Saitama Soco Sério (INÍCIO)!" },
-    "gg": { action: "heal", prefab: "GG", message: "GG! O chat mandou GG e curou o Chefe Sukuna em 5%!" }
+    "chapeu": { action: "spawn", prefab: "SukunaFinger", message: "CHAPÉU! Saitama Soco Sério (INÍCIO)!" }
 };
 
 function normalizeGiftName(name) {
