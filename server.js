@@ -77,12 +77,8 @@ function getOrConnectStreamer(username) {
     return eventQueues[username];
 }
 
-// --- ROTA RAIZ (Para o UptimeRobot não marcar como offline) ---
-app.get('/', (req, res) => {
-    res.send('TikTok Bridge is Online and Working!');
-});
-
 // --- ROTA DE EVENTOS PARA O ROBLOX ---
+// O Roblox agora precisa mandar o usuário: /events?user=nomedostreamer
 app.get('/events', (req, res) => {
     const username = req.query.user;
     
@@ -104,22 +100,36 @@ app.get('/events', (req, res) => {
 // --- ROTA DE SIMULAÇÃO ---
 app.get('/simulate', (req, res) => {
     const username = req.query.user || "souosam25";
-    const rawGift = req.query.gift || "Rosa";
-    const cleanName = normalizeGiftName(rawGift);
-    const actionConfig = giftToAnimeAction[cleanName];
-    
+    const type = req.query.type || "gift"; // Permite escolher entre 'gift' ou 'follow'
     const queue = getOrConnectStreamer(username);
 
-    if (actionConfig && queue) {
-        queue.push({ 
-            type: 'gift', 
-            user: 'SamuelTester', 
-            gift: rawGift, 
-            data: actionConfig 
+    if (!queue) {
+        return res.send(`Erro ao conectar em @${username}.`);
+    }
+
+    if (type === "follow") {
+        const followerName = req.query.name || "ViewerSeguidor";
+        queue.push({
+            type: 'follow',
+            user: followerName
         });
-        res.send(`Sucesso! Presente simulado para @${username}: "${rawGift}".`);
+        res.send(`Sucesso! Follow simulado para @${username} por "${followerName}".`);
     } else {
-        res.send(`Erro ao simular para @${username}. Verifique o presente.`);
+        const rawGift = req.query.gift || "Rosa";
+        const cleanName = normalizeGiftName(rawGift);
+        const actionConfig = giftToAnimeAction[cleanName];
+
+        if (actionConfig) {
+            queue.push({ 
+                type: 'gift', 
+                user: 'SamuelTester', 
+                gift: rawGift, 
+                data: actionConfig 
+            });
+            res.send(`Sucesso! Presente simulado para @${username}: "${rawGift}".`);
+        } else {
+            res.send(`Erro ao simular. Presente inválido: "${rawGift}".`);
+        }
     }
 });
 
