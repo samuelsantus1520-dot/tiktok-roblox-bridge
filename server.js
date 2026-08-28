@@ -77,8 +77,12 @@ function getOrConnectStreamer(username) {
     return eventQueues[username];
 }
 
+// --- ROTA RAIZ (Para o UptimeRobot não marcar como offline) ---
+app.get('/', (req, res) => {
+    res.send('TikTok Bridge is Online and Working!');
+});
+
 // --- ROTA DE EVENTOS PARA O ROBLOX ---
-// O Roblox agora precisa mandar o usuário: /events?user=nomedostreamer
 app.get('/events', (req, res) => {
     const username = req.query.user;
     
