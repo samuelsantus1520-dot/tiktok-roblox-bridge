@@ -44,34 +44,29 @@ tiktokLiveConnection.connect().then(state => {
     console.error(`[TikTok Bridge] Erro ao conectar:`, err.message);
 });
 
-// Controle anti-duplicação rigoroso por ID de Mensagem do TikTok para presentes
-const processedMsgIds = new Set();
+// Cooldown rigoroso de 3 segundos por Usuário + Presente (Bloqueia qualquer duplicação rápida)
+const recentGifts = {};
 
 tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-    const msgId = data.msgId;
-
-    if (msgId && processedMsgIds.has(msgId)) {
-        return;
-    }
-
-    if (msgId) {
-        processedMsgIds.add(msgId);
-        if (processedMsgIds.size > 200) {
-            const oldestId = processedMsgIds.values().next().value;
-            processedMsgIds.delete(oldestId);
-        }
-    }
-
-    if (data.repeatEnd === false) return;
-
     const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
     const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
     const cleanName = normalizeGiftName(rawGiftName);
 
+    // Chave única para o usuário + presente
+    const giftKey = `${userName}_${cleanName}`;
+    const now = Date.now();
+
+    // Se o mesmo usuário mandou o mesmo presente há menos de 3 segundos, ignora o pacote duplicado!
+    if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 3000)) {
+        return; 
+    }
+    recentGifts[giftKey] = now;
+
+    // Traduz para o padrão que o Roblox entende
     const mappedGift = giftMapping[cleanName];
 
     if (mappedGift) {
-        console.log(`[ANIME] Presente processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
+        console.log(`[ANIME] Presente único processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
         eventQueues[defaultUsername].push({ 
             type: 'gift', 
             user: userName, 
@@ -83,7 +78,7 @@ tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
     }
 });
 
-// EVENTO DE SEGUIDOR (FOLLOW) RESTAURADO AQUI
+// EVENTO DE SEGUIDOR (FOLLOW)
 tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
     if (data.displayType && data.displayType.includes('follow')) {
         const userName = data.uniqueId || "Viewer";
