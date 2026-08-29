@@ -44,31 +44,41 @@ tiktokLiveConnection.connect().then(state => {
     console.error(`[TikTok Bridge] Erro ao conectar:`, err.message);
 });
 
-// Controle anti-duplicação por tempo (2 segundos)
-const recentGifts = {};
+// Controle anti-duplicação rigoroso por ID de Mensagem do TikTok
+const processedMsgIds = new Set();
 
 tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
+    const msgId = data.msgId;
+
+    // Se já processamos essa exata mensagem do TikTok, bloqueia na hora!
+    if (msgId && processedMsgIds.has(msgId)) {
+        return;
+    }
+
+    if (msgId) {
+        processedMsgIds.add(msgId);
+        // Limpa registros antigos para não pesar a memória
+        if (processedMsgIds.size > 200) {
+            const oldestId = processedMsgIds.values().next().value;
+            processedMsgIds.delete(oldestId);
+        }
+    }
+
+    // Ignora pacotes intermediários de combo se houver
+    if (data.repeatEnd === false) return;
+
     const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
     const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
     const cleanName = normalizeGiftName(rawGiftName);
 
-    // Evita pacotes duplicados muito rápidos do TikTok
-    const giftKey = `${userName}_${cleanName}`;
-    const now = Date.now();
-    if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 2000)) {
-        return; 
-    }
-    recentGifts[giftKey] = now;
-
-    // Traduz para o padrão que o Roblox entende
     const mappedGift = giftMapping[cleanName];
 
     if (mappedGift) {
-        console.log(`[ANIME] Presente mapeado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
+        console.log(`[ANIME] Presente único processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
         eventQueues[defaultUsername].push({ 
             type: 'gift', 
             user: userName, 
-            gift: mappedGift, // Envia a chave exata para o Roblox ler no script dele
+            gift: mappedGift, 
             giftName: mappedGift 
         });
     } else {
