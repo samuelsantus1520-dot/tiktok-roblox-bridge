@@ -56,13 +56,18 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Captura presentes com extração segura de propriedades
+    // Captura presentes
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
         const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
         const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
 
         const cleanName = normalizeGiftName(rawGiftName);
-        const actionConfig = giftToAnimeAction[cleanName];
+        
+        // CORREÇÃO DIRETA PARA A ROSA RODAR AGORA
+        let actionConfig = giftToAnimeAction[cleanName];
+        if (!actionConfig && cleanName.includes("rosa")) {
+            actionConfig = { action: "spawn", prefab: "Luffy", message: "ROSA! Luffy Gear 5 (+15)!" };
+        }
         
         if (actionConfig) {
             console.log(`[${username}][ANIME] ` + actionConfig.message + ' (Enviado por: ' + userName + ')');
