@@ -44,27 +44,24 @@ tiktokLiveConnection.connect().then(state => {
     console.error(`[TikTok Bridge] Erro ao conectar:`, err.message);
 });
 
-// Controle anti-duplicação rigoroso por ID de Mensagem do TikTok
+// Controle anti-duplicação rigoroso por ID de Mensagem do TikTok para presentes
 const processedMsgIds = new Set();
 
 tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
     const msgId = data.msgId;
 
-    // Se já processamos essa exata mensagem do TikTok, bloqueia na hora!
     if (msgId && processedMsgIds.has(msgId)) {
         return;
     }
 
     if (msgId) {
         processedMsgIds.add(msgId);
-        // Limpa registros antigos para não pesar a memória
         if (processedMsgIds.size > 200) {
             const oldestId = processedMsgIds.values().next().value;
             processedMsgIds.delete(oldestId);
         }
     }
 
-    // Ignora pacotes intermediários de combo se houver
     if (data.repeatEnd === false) return;
 
     const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
@@ -74,7 +71,7 @@ tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
     const mappedGift = giftMapping[cleanName];
 
     if (mappedGift) {
-        console.log(`[ANIME] Presente único processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
+        console.log(`[ANIME] Presente processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
         eventQueues[defaultUsername].push({ 
             type: 'gift', 
             user: userName, 
@@ -83,6 +80,18 @@ tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
         });
     } else {
         console.log(`[DEBUG] Presente não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
+    }
+});
+
+// EVENTO DE SEGUIDOR (FOLLOW) RESTAURADO AQUI
+tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
+    if (data.displayType && data.displayType.includes('follow')) {
+        const userName = data.uniqueId || "Viewer";
+        console.log(`[FOLLOW] Novo seguidor detectado: ${userName}`);
+        eventQueues[defaultUsername].push({ 
+            type: 'follow', 
+            user: userName 
+        });
     }
 });
 
