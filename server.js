@@ -8,7 +8,7 @@ app.use(express.json());
 
 const activeConnections = {};
 const eventQueues = {};
-const recentGifts = {};
+const processedMsgIds = {}; // Armazena IDs de mensagens já processadas
 
 // Mapeia qualquer variação (Inglês/Português) para a chave exata que o Roblox espera
 const giftMapping = {
@@ -49,24 +49,31 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Evento de Presente com trava anti-duplicação específica por streamer
+    // Evento de Presente blindado contra duplicação por msgId
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
-        const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
-        const cleanName = normalizeGiftName(rawGiftName);
+        const msgId = data.msgId;
 
-        // Trava rigorosa de 3 segundos por Streamer + Usuário + Presente
-        const giftKey = `${username}_${userName}_${cleanName}`;
-        const now = Date.now();
-        if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 3000)) {
-            return; 
+        // Se já processamos essa exata mensagem do TikTok, bloqueia imediatamente!
+        if (msgId && processedMsgIds[msgId]) {
+            return;
         }
-        recentGifts[giftKey] = now;
+        if (msgId) {
+            processedMsgIds[msgId] = true;
+            // Limpa IDs antigos para economizar memória (mantém os últimos 300)
+            const keys = Object.keys(processedMsgIds);
+            if (keys.length > 300) {
+                delete processedMsgIds[keys[0]];
+            }
+        }
+
+        const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
+        const userName = data.uniqueId || data.nickname || "Viewer";
+        const cleanName = normalizeGiftName(rawGiftName);
 
         const mappedGift = giftMapping[cleanName];
 
         if (mappedGift) {
-            console.log(`[${username}][ANIME] Processado: "${rawGiftName}" -> "${mappedGift}" (${userName})`);
+            console.log(`[${username}][ANIME] Processado: "${rawGiftName}" -> "${mappedGift}" (${userName}) [ID: ${msgId || 'N/A'}]`);
             eventQueues[username].push({ 
                 type: 'gift', 
                 user: userName, 
@@ -81,7 +88,7 @@ function getOrConnectStreamer(username) {
     // Evento de Follow (Seguidor)
     tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
         if (data.displayType && data.displayType.includes('follow')) {
-            const userName = data.uniqueId || "Viewer";
+            const userName = data.uniqueId || data.nickname || "Viewer";
             console.log(`[${username}][FOLLOW] Novo seguidor: ${userName}`);
             eventQueues[username].push({ 
                 type: 'follow', 
@@ -94,7 +101,6 @@ function getOrConnectStreamer(username) {
     return eventQueues[username];
 }
 
-// Rota dinâmica que atende qualquer streamer via ?user=nome
 app.get('/events', (req, res) => {
     const username = (req.query.user || "souosam25").toLowerCase().replace(/^@/, "");
     const queue = getOrConnectStreamer(username);
@@ -108,6 +114,5 @@ app.listen(PORT, () => {
     console.log(`\n========================================`);
     console.log(`[Bridge Server] Rodando na nuvem na porta ${PORT}`);
     console.log(`========================================\n`);
-    // Já deixa o seu canal pré-conectado ao ligar o servidor
     getOrConnectStreamer("souosam25");
 });
