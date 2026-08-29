@@ -11,8 +11,6 @@ app.use(express.json());
 // --- 1. LISTA DE CLIENTES AUTORIZADOS (WHITELIST) ---
 const whitelistAtiva = [
     "souosam25", // O seu próprio perfil para testes
-    // Adicione os @ dos seus clientes pagantes aqui embaixo no futuro:
-    // "cliente_exemplo",
 ];
 
 // Dicionários para guardar as conexões e filas de cada streamer separadamente
@@ -58,20 +56,23 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Captura presentes
+    // Captura presentes (SEM TRAVAS, pega qualquer envio imediatamente)
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        if (data.giftType === 1 || data.repeatEnd) {
-            const cleanName = normalizeGiftName(data.giftName);
-            const actionConfig = giftToAnimeAction[cleanName];
-            if (actionConfig) {
-                console.log(`[${username}][ANIME] ` + actionConfig.message + ' (Enviado por: ' + data.uniqueId + ')');
-                eventQueues[username].push({ 
-                    type: 'gift', 
-                    user: data.uniqueId, 
-                    gift: data.giftName, 
-                    data: actionConfig 
-                });
-            }
+        console.log(`[DEBUG] Presente recebido: "${data.giftName}" | De: ${data.uniqueId}`);
+
+        const cleanName = normalizeGiftName(data.giftName);
+        const actionConfig = giftToAnimeAction[cleanName];
+        
+        if (actionConfig) {
+            console.log(`[${username}][ANIME] ` + actionConfig.message + ' (Enviado por: ' + data.uniqueId + ')');
+            eventQueues[username].push({ 
+                type: 'gift', 
+                user: data.uniqueId, 
+                gift: data.giftName, 
+                data: actionConfig 
+            });
+        } else {
+            console.log(`[DEBUG] Presente "${data.giftName}" (limpo: "${cleanName}") não está mapeado no giftToAnimeAction.`);
         }
     });
 
@@ -195,7 +196,6 @@ rl.question('Digite o seu @ do TikTok para iniciar a Bridge: ', (tiktokUsername)
         console.log(`[Bridge Server] Canal configurado: @${cleanUsername}`);
         console.log(`========================================\n`);
         
-        // Já inicia a conexão com a live dele de antemão se quiser
         getOrConnectStreamer(cleanUsername);
     });
 });
