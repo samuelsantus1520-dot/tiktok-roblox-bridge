@@ -8,9 +8,8 @@ app.use(express.json());
 
 const activeConnections = {};
 const eventQueues = {};
-const processedMsgIds = {}; // Armazena IDs de mensagens já processadas
+const processedMsgIds = {};
 
-// Mapeia qualquer variação (Inglês/Português) para a chave exata que o Roblox espera
 const giftMapping = {
     "rosa": "rosa",
     "rose": "rosa",
@@ -49,17 +48,16 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Evento de Presente blindado contra duplicação por msgId
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        const msgId = data.msgId;
+        // Ignora pacotes intermediários de combo
+        if (data.repeatEnd === false) return;
 
-        // Se já processamos essa exata mensagem do TikTok, bloqueia imediatamente!
+        const msgId = data.msgId;
         if (msgId && processedMsgIds[msgId]) {
             return;
         }
         if (msgId) {
             processedMsgIds[msgId] = true;
-            // Limpa IDs antigos para economizar memória (mantém os últimos 300)
             const keys = Object.keys(processedMsgIds);
             if (keys.length > 300) {
                 delete processedMsgIds[keys[0]];
@@ -73,7 +71,7 @@ function getOrConnectStreamer(username) {
         const mappedGift = giftMapping[cleanName];
 
         if (mappedGift) {
-            console.log(`[${username}][ANIME] Processado: "${rawGiftName}" -> "${mappedGift}" (${userName}) [ID: ${msgId || 'N/A'}]`);
+            console.log(`[${username}][ANIME] Processado: "${rawGiftName}" -> "${mappedGift}" (${userName})`);
             eventQueues[username].push({ 
                 type: 'gift', 
                 user: userName, 
@@ -85,7 +83,6 @@ function getOrConnectStreamer(username) {
         }
     });
 
-    // Evento de Follow (Seguidor)
     tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
         if (data.displayType && data.displayType.includes('follow')) {
             const userName = data.uniqueId || data.nickname || "Viewer";
@@ -107,7 +104,7 @@ app.get('/events', (req, res) => {
     if (!queue) return res.json({ events: [] });
 
     res.json({ events: queue });
-    eventQueues[username] = []; // Esvazia a fila após o Roblox ler
+    eventQueues[username] = [];
 });
 
 app.listen(PORT, () => {
