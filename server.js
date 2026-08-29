@@ -8,9 +8,9 @@ app.use(express.json());
 
 const activeConnections = {};
 const eventQueues = {};
-const processedMsgIds = {};
-const recentGifts = {}; // Trava de tempo de segurança
+const recentGlobalGifts = {}; // Trava global estrita por tipo de presente (bloqueia ecos em menos de 3s)
 
+// Mapeia variações para a chave exata
 const giftMapping = {
     "rosa": "rosa",
     "rose": "rosa",
@@ -49,63 +49,67 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // EVENTO DE PRESENTE COM DUPLA TRAVA (msgId + Cooldown de 3s)
+    // --- EVENTO DE PRESENTE COM TRAVA GLOBAL ANTI-DUPLICAÇÃO ---
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
         if (data.repeatEnd === false) return;
 
-        const msgId = data.msgId;
         const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
-        const userName = data.uniqueId || data.nickname || "Viewer";
         const cleanName = normalizeGiftName(rawGiftName);
-
-        // Trava 1: Se o ID da mensagem já foi processado
-        if (msgId && processedMsgIds[msgId]) {
-            return;
-        }
-
-        // Trava 2: Cooldown estricto de 3 segundos por usuário + presente (caso o ID venha vazio/N/A)
-        const giftKey = `${username}_${userName}_${cleanName}`;
-        const now = Date.now();
-        if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 3000)) {
-            return;
-        }
-        recentGifts[giftKey] = now;
-
-        if (msgId) {
-            processedMsgIds[msgId] = true;
-            const keys = Object.keys(processedMsgIds);
-            if (keys.length > 300) {
-                delete processedMsgIds[keys[0]];
-            }
-        }
-
         const mappedGift = giftMapping[cleanName];
 
-        if (mappedGift) {
-            console.log(`[${username}][ANIME] Processado: "${rawGiftName}" -> "${mappedGift}" (${userName})`);
-            eventQueues[username].push({ 
-                type: 'gift', 
-                user: userName, 
-                gift: mappedGift, 
-                giftName: mappedGift 
-            });
-        } else {
+        if (!mappedGift) {
             console.log(`[${username}][DEBUG] Não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
+            return;
         }
+
+        // TRAVA GLOBAL: Se o mesmo presente chegou há menos de 3 segundos, o eco do TikTok é descartado na hora
+        const giftKey = `${username}_${mappedGift}`;
+        const now = Date.now();
+        if (recentGlobalGifts[giftKey] && (now - recentGlobalGifts[giftKey] < 3000)) {
+            return; 
+        }
+        recentGlobalGifts[giftKey] = now;
+
+        const userName = data.uniqueId || data.nickname || "Viewer";
+
+        console.log(`[${username}][ANIME] Presente único processado: "${rawGiftName}" -> "${mappedGift}" (${userName})`);
+        eventQueues[username].push({ 
+            type: 'gift', 
+            user: userName, 
+            gift: mappedGift, 
+            giftName: mappedGift,
+            timestamp: now
+        });
     });
 
-    // EVENTO DE SEGUIDOR (SOCIAL) MAIS FLEXÍVEL
+    // --- EVENTO DE SEGUIDOR (COM LOG DE DEPURAÇÃO SOCIAL) ---
+    const handleFollowEvent = (data) => {
+        const userName = data.uniqueId || data.nickname || "Novo Seguidor";
+        
+        const followKey = `${username}_follow_${userName}`;
+        const now = Date.now();
+        if (recentGlobalGifts[followKey] && (now - recentGlobalGifts[followKey] < 5000)) {
+            return;
+        }
+        recentGlobalGifts[followKey] = now;
+
+        console.log(`[${username}][FOLLOW] Novo Seguidor detectado: ${userName}`);
+        eventQueues[username].push({ 
+            type: 'follow', 
+            user: userName,
+            timestamp: now
+        });
+    };
+
+    tiktokLiveConnection.on(WebcastEvent.FOLLOW, handleFollowEvent);
+    
     tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
-        console.log(`[${username}][SOCIAL EVENT]`, JSON.stringify(data)); // Ajuda a debugar nos logs do Render
+        // Mostra nos logs do Render o que o TikTok envia no Social para diagnosticarmos o Follow
+        console.log(`[${username}][SOCIAL EVENT DEBUG]`, JSON.stringify(data));
         
         const displayType = (data.displayType || "").toLowerCase();
         if (displayType.includes('follow') || displayType.includes('share') || data.actionId === '3') {
-            const userName = data.uniqueId || data.nickname || "Viewer";
-            console.log(`[${username}][FOLLOW] Novo seguidor confirmado: ${userName}`);
-            eventQueues[username].push({ 
-                type: 'follow', 
-                user: userName 
-            });
+            handleFollowEvent(data);
         }
     });
 
