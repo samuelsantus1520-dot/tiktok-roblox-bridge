@@ -56,23 +56,24 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Captura presentes (Sem travas restritivas, capturando qualquer envio)
+    // Captura presentes com extração segura de propriedades
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        console.log(`[DEBUG] Presente recebido: "${data.giftName}" | De: ${data.uniqueId}`);
+        const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
+        const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
 
-        const cleanName = normalizeGiftName(data.giftName);
+        const cleanName = normalizeGiftName(rawGiftName);
         const actionConfig = giftToAnimeAction[cleanName];
         
         if (actionConfig) {
-            console.log(`[${username}][ANIME] ` + actionConfig.message + ' (Enviado por: ' + data.uniqueId + ')');
+            console.log(`[${username}][ANIME] ` + actionConfig.message + ' (Enviado por: ' + userName + ')');
             eventQueues[username].push({ 
                 type: 'gift', 
-                user: data.uniqueId, 
-                gift: data.giftName, 
+                user: userName, 
+                gift: rawGiftName, 
                 data: actionConfig 
             });
         } else {
-            console.log(`[DEBUG] Presente "${data.giftName}" (limpo: "${cleanName}") não está mapeado no giftToAnimeAction.`);
+            console.log(`[DEBUG] Presente não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
         }
     });
 
