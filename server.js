@@ -56,7 +56,7 @@ function getOrConnectStreamer(username) {
         console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
     });
 
-    // Captura presentes (SEM TRAVAS, pega qualquer envio imediatamente)
+    // Captura presentes (Sem travas restritivas, capturando qualquer envio)
     tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
         console.log(`[DEBUG] Presente recebido: "${data.giftName}" | De: ${data.uniqueId}`);
 
@@ -174,28 +174,35 @@ app.get('/simulate', (req, res) => {
     }
 });
 
-// --- CONFIGURAÇÃO DA LEITURA DO TERMINAL E INÍCIO DO SERVIDOR ---
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
+// --- CONFIGURAÇÃO INTELIGENTE (RENDER OU LOCAL) ---
+const defaultUsername = "souosam25";
 
-rl.question('Digite o seu @ do TikTok para iniciar a Bridge: ', (tiktokUsername) => {
-    const cleanUsername = tiktokUsername.trim().replace(/^@/, "").toLowerCase();
-
-    if (!cleanUsername) {
-        console.log('❌ Nome de usuário inválido!');
-        process.exit(1);
-    }
-
-    rl.close();
-
+if (process.env.PORT) {
+    // Rodando no Render (Nuvem) - Inicia direto sem travar o deploy
     app.listen(PORT, () => {
         console.log(`\n========================================`);
-        console.log(`[Bridge Server] Rodando na porta ${PORT}`);
-        console.log(`[Bridge Server] Canal configurado: @${cleanUsername}`);
+        console.log(`[Bridge Server] Rodando na nuvem na porta ${PORT}`);
+        console.log(`[Bridge Server] Canal configurado: @${defaultUsername}`);
         console.log(`========================================\n`);
-        
-        getOrConnectStreamer(cleanUsername);
+        getOrConnectStreamer(defaultUsername);
     });
-});
+} else {
+    // Rodando no seu PC localmente pelo terminal/bat
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    rl.question('Digite o seu @ do TikTok para iniciar a Bridge: ', (tiktokUsername) => {
+        const cleanUsername = tiktokUsername.trim().replace(/^@/, "").toLowerCase() || defaultUsername;
+        rl.close();
+
+        app.listen(PORT, () => {
+            console.log(`\n========================================`);
+            console.log(`[Bridge Server] Rodando na porta ${PORT}`);
+            console.log(`[Bridge Server] Canal configurado: @${cleanUsername}`);
+            console.log(`========================================\n`);
+            getOrConnectStreamer(cleanUsername);
+        });
+    });
+}
