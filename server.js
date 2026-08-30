@@ -1,8 +1,8 @@
 const express = require('express');
 
-// Importação segura do tiktok-live-connector
+// Correção definitiva para extrair a classe corretamente no Node.js moderno
 const tiktokModule = require('tiktok-live-connector');
-const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default?.WebcastPushConnection || tiktokModule;
+const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default || tiktokModule;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +14,6 @@ app.use(express.urlencoded({ extended: true }));
 const eventQueues = {};
 const defaultUsername = 'souosam25'; // Seu usuário padrão
 
-// Função auxiliar para adicionar um evento na fila do usuário correto
 function addEvent(username, eventData) {
     const userKey = username || defaultUsername;
     if (!eventQueues[userKey]) {
