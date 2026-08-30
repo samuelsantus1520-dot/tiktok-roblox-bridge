@@ -5,18 +5,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// 1. LISTA DE CLIENTES AUTORIZADOS (Quem pagou pelo pacote)
-// Sempre que vender para alguém novo, basta adicionar o @ aqui e subir no Render.
-const authorizedClients = [
-    "souosam25",
-    // "cliente_exemplo_1",
-    // "outro_cliente"
-];
-
-// Armazena as conexões ativas e as filas de eventos separadas por streamer
-const activeConnections = {};
+const defaultUsername = "souosam25";
 const eventQueues = {};
+eventQueues[defaultUsername] = [];
 
 // Mapeia qualquer variação (Inglês/Português) para a chave exata que o Roblox espera
 const giftMapping = {
@@ -31,7 +24,7 @@ const giftMapping = {
     "donut": "rosquinha",
     "doughnut": "rosquinha",
     "capivara": "capivara",
-    "capybara": "capybara",
+    "capybara": "capivara",
     "bone": "bone",
     "cap": "bone",
     "chapeu": "chapeu",
@@ -43,103 +36,152 @@ function normalizeGiftName(name) {
     return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
-// 2. FUNÇÃO QUE CONECTA NO TIKTOK LIVE DE UM CLIENTE ESPECÍFICO
-function setupUserConnection(username) {
-    if (activeConnections[username]) return; // Evita abrir conexões duplicadas para o mesmo usuário
+console.log(`[TikTok Bridge] Conectando ao canal de: @${defaultUsername}`);
+const tiktokLiveConnection = new TikTokLiveConnection(defaultUsername, {});
 
-    console.log(`[TikTok Bridge] Inicializando conexão para o canal de: @${username}`);
-    const tiktokLiveConnection = new TikTokLiveConnection(username, {});
-    
-    eventQueues[username] = [];
-    activeConnections[username] = tiktokLiveConnection;
-
-    tiktokLiveConnection.connect().then(state => {
-        console.log(`[TikTok Bridge] Conectado com sucesso à sala de @${username} (ID: ${state.roomId})`);
-    }).catch(err => {
-        console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
-        delete activeConnections[username]; // Permite tentar novamente depois se cair
-    });
-
-    // Cooldown rigoroso de 3 segundos por Usuário + Presente
-    const recentGifts = {};
-
-    tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
-        const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
-        const cleanName = normalizeGiftName(rawGiftName);
-
-        const giftKey = `${userName}_${cleanName}`;
-        const now = Date.now();
-
-        if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 3000)) {
-            return; 
-        }
-        recentGifts[giftKey] = now;
-
-        const mappedGift = giftMapping[cleanName];
-
-        if (mappedGift) {
-            console.log(`[@${username}] Presente processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
-            if (eventQueues[username]) {
-                eventQueues[username].push({ 
-                    type: 'gift', 
-                    user: userName, 
-                    gift: mappedGift, 
-                    giftName: mappedGift 
-                });
-            }
-        } else {
-            console.log(`[@${username}][DEBUG] Presente não mapeado: "${rawGiftName}"`);
-        }
-    });
-
-    // EVENTO DE SEGUIDOR (FOLLOW)
-    tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
-        if (data.displayType && data.displayType.includes('follow')) {
-            const userName = data.uniqueId || "Viewer";
-            console.log(`[@${username}][FOLLOW] Novo seguidor detectado: ${userName}`);
-            if (eventQueues[username]) {
-                eventQueues[username].push({ 
-                    type: 'follow', 
-                    user: userName 
-                });
-            }
-        }
-    });
-}
-
-// ROTA RAIZ (Para o UptimeRobot monitorar e dar Status Verde 200 OK)
-app.get('/', (req, res) => {
-    res.status(200).send('TikTok Roblox Bridge está online e funcionando!');
+tiktokLiveConnection.connect().then(state => {
+    console.log(`[TikTok Bridge] Conectado com sucesso à sala (ID: ${state.roomId})`);
+}).catch(err => {
+    console.warn(`[TikTok Bridge] Aviso: Não foi possível conectar ao TikTok Live (provavelmente a live está fechada). O modo de simulação via painel web continua funcionando perfeitamente!`);
 });
 
-// 3. ENDPOINT DINÂMICO PARA O ROBLOX BUSCAR OS EVENTOS
+// Cooldown de segurança por Usuário + Presente
+const recentGifts = {};
+
+tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
+    if (data.repeatEnd === false) {
+        return;
+    }
+
+    const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
+    const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
+    const cleanName = normalizeGiftName(rawGiftName);
+
+    const giftKey = `${userName}_${cleanName}`;
+    const now = Date.now();
+
+    if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 2500)) {
+        return; 
+    }
+    recentGifts[giftKey] = now;
+
+    const mappedGift = giftMapping[cleanName];
+
+    if (mappedGift) {
+        console.log(`[ANIME] Presente único processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
+        eventQueues[defaultUsername].push({ 
+            type: 'gift', 
+            user: userName, 
+            gift: mappedGift, 
+            giftName: mappedGift 
+        });
+    } else {
+        console.log(`[DEBUG] Presente não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
+    }
+});
+
+tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
+    if (data.displayType && data.displayType.includes('follow')) {
+        const userName = data.uniqueId || "Viewer";
+        console.log(`[FOLLOW] Novo seguidor detectado: ${userName}`);
+        eventQueues[defaultUsername].push({ 
+            type: 'follow', 
+            user: userName 
+        });
+    }
+});
+
 app.get('/events', (req, res) => {
-    const username = req.query.user;
+    res.json({ events: eventQueues[defaultUsername] });
+    eventQueues[defaultUsername] = [];
+});
 
-    // Valida se mandou o parâmetro do usuário
-    if (!username) {
-        return res.status(400).json({ error: "Usuário não informado na URL." });
-    }
+// ==========================================
+// 🛠️ PAINEL DE TESTE / SIMULAÇÃO PARA VÍDEO
+// ==========================================
 
-    // Trava de segurança: Se o usuário não pagou, bloqueia na hora!
-    if (!authorizedClients.includes(username)) {
-        console.log(`[Segurança] Acesso negado para o usuário não autorizado: @${username}`);
-        return res.status(403).json({ error: "Acesso não autorizado. Adquira o pacote!" });
-    }
+app.post('/simulate', (req, res) => {
+    const { type, user, gift } = req.body;
+    const userName = user || "ViewerTeste";
 
-    // Se o cliente é válido mas ainda não abriu a live dele no servidor, abre agora sob demanda
-    if (!activeConnections[username]) {
-        setupUserConnection(username);
-    }
-
-    // Retorna os eventos acumulados daquele cliente específico e limpa a fila dele
-    const events = eventQueues[username] || [];
-    eventQueues[username] = [];
+    if (type === 'follow') {
+        eventQueues[defaultUsername].push({ type: 'follow', user: userName });
+        console.log(`[SIMULAÇÃO] Follow adicionado para: ${userName}`);
+        return res.json({ success: true, message: `Follow de ${userName} simulado!` });
+    } 
     
-    res.json({ events });
+    if (type === 'gift') {
+        const cleanGift = normalizeGiftName(gift || "rosa");
+        const mappedGift = giftMapping[cleanGift] || cleanGift;
+        eventQueues[defaultUsername].push({ 
+            type: 'gift', 
+            user: userName, 
+            gift: mappedGift, 
+            giftName: mappedGift 
+        });
+        console.log(`[SIMULAÇÃO] Presente simulado: "${mappedGift}" de ${userName}`);
+        return res.json({ success: true, message: `Presente ${mappedGift} simulado!` });
+    }
+
+    res.status(400).json({ success: false, message: "Tipo de evento inválido." });
+});
+
+// Página Web Local de Teste
+app.get('/', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>Painel de Testes - TikTok Live Bridge</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; padding: 40px; }
+                h1 { color: #fe2c55; }
+                .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; max-width: 650px; margin: 0 auto; }
+                button { background: #25f4ee; color: #000; border: none; padding: 14px 22px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+                button:hover { background: #fe2c55; color: #fff; transform: scale(1.05); }
+                .follow-btn { background: #fe2c55; color: #fff; }
+                input { padding: 12px; font-size: 16px; border-radius: 5px; border: 1px solid #444; background: #222; color: #fff; margin-bottom: 20px; width: 280px; text-align: center; }
+                .log { margin-top: 25px; font-family: monospace; color: #00ffcc; font-size: 15px; }
+            </style>
+        </head>
+        <body>
+            <h1>🎮 Painel de Testes TikTok Live</h1>
+            <p>Insira o nome do viewer e clique nos botões para acionar os eventos no seu jogo:</p>
+            <div>
+                <input type="text" id="username" value="SamuelViewer" placeholder="Nome do Viewer"><br>
+            </div>
+            <div class="container">
+                <button class="follow-btn" onclick="sendEvent('follow')">👤 Simular Follow</button>
+                <button onclick="sendEvent('gift', 'rosa')">🌹 Rosa</button>
+                <button onclick="sendEvent('gift', 'tiktok')">🎵 TikTok</button>
+                <button onclick="sendEvent('gift', 'dedo de coracao')">🫶 Dedo de Coração</button>
+                <button onclick="sendEvent('gift', 'carinha verde')">🟢 Carinha Verde</button>
+                <button onclick="sendEvent('gift', 'rosquinha')">🍩 Rosquinha</button>
+                <button onclick="sendEvent('gift', 'capivara')">🦫 Capivara</button>
+                <button onclick="sendEvent('gift', 'bone')">🧢 Boné</button>
+                <button onclick="sendEvent('gift', 'chapeu')">🎩 Chapéu</button>
+            </div>
+            <div class="log" id="log">Pronto para testar...</div>
+
+            <script>
+                async function sendEvent(type, gift = null) {
+                    const user = document.getElementById('username').value || 'ViewerTeste';
+                    const response = await fetch('/simulate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type, user, gift })
+                    });
+                    const data = await response.json();
+                    document.getElementById('log').innerText = "✔ " + data.message;
+                }
+            </script>
+        </body>
+        </html>
+    `);
 });
 
 app.listen(PORT, () => {
-    console.log(`[Bridge Server Multi-Streamer] Rodando na porta ${PORT}`);
+    console.log(`[Bridge Server] Rodando na porta ${PORT} para @${defaultUsername}`);
+    console.log(`👉 Abra no seu navegador para testar visualmente: http://localhost:3000`);
 });
