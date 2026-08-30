@@ -88,7 +88,6 @@ tiktokLiveConnection.on('chat', data => {
 
 // Evento de Presentes (Gifts)
 tiktokLiveConnection.on('gift', data => {
-    // Filtra para pegar apenas presentes válidos ou fim de combos para não duplicar
     if (data.giftType === 1 || data.repeatEnd) {
         addEvent(defaultUsername, {
             type: 'gift',
