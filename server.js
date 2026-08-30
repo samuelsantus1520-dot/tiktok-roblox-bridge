@@ -232,10 +232,13 @@ function iniciarConexaoTikTok(username) {
     }
 }
 
-// Inicia a conexão para cada streamer da lista automaticamente
-streamersParaConectar.forEach(username => {
-    console.log(`[Sistema] Iniciando monitoramento para: @${username}`);
-    iniciarConexaoTikTok(username);
+// Inicia a conexão para cada streamer da lista com atraso escalonado (1 segundo entre cada)
+streamersParaConectar.forEach((username, index) => {
+    const atraso = index * 1000; 
+    setTimeout(() => {
+        console.log(`[Sistema] Iniciando monitoramento para: @${username}`);
+        iniciarConexaoTikTok(username);
+    }, atraso);
 });
 
 // Inicializar o servidor
