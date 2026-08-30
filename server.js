@@ -1,6 +1,6 @@
 const express = require('express');
 
-// Carregamento seguro para evitar o erro de construtor no Node.js e no Render
+// Importação segura do tiktok-live-connector
 const tiktokModule = require('tiktok-live-connector');
 const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default?.WebcastPushConnection || tiktokModule;
 
@@ -27,7 +27,6 @@ function addEvent(username, eventData) {
 // ROTAS DO SERVIDOR
 // ==========================================
 
-// Rota principal (Página inicial simples)
 app.get('/', (req, res) => {
     res.send(`
         <h2>TikTok Live to Roblox Bridge está online! 🚀</h2>
@@ -39,7 +38,6 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Rota que o Roblox vai acessar via HttpService a cada X segundos
 app.get('/events', (req, res) => {
     const username = req.query.user || defaultUsername;
     
@@ -47,15 +45,13 @@ app.get('/events', (req, res) => {
         eventQueues[username] = [];
     }
 
-    // Retorna os eventos acumulados e limpa a fila imediatamente
     res.json({ events: eventQueues[username] });
     eventQueues[username] = []; 
 });
 
-// Rota de Simulação (Para testar no navegador sem live real)
 app.get('/simulate', (req, res) => {
     const username = req.query.user || defaultUsername;
-    const type = req.query.type || 'follow'; // 'follow', 'gift', 'chat'
+    const type = req.query.type || 'follow';
     const name = req.query.name || 'ViewerTeste';
     const details = req.query.details || 'Rosa';
 
@@ -81,7 +77,6 @@ tiktokLiveConnection.connect().then(state => {
     console.error('[TikTok] Erro ao conectar na live (você ainda pode usar o /simulate se estiver offline):', err);
 });
 
-// Evento de Chat
 tiktokLiveConnection.on('chat', data => {
     addEvent(defaultUsername, {
         type: 'chat',
@@ -90,7 +85,6 @@ tiktokLiveConnection.on('chat', data => {
     });
 });
 
-// Evento de Presentes (Gifts)
 tiktokLiveConnection.on('gift', data => {
     if (data.giftType === 1 || data.repeatEnd) {
         addEvent(defaultUsername, {
@@ -102,7 +96,6 @@ tiktokLiveConnection.on('gift', data => {
     }
 });
 
-// Evento de Follow (Seguir)
 tiktokLiveConnection.on('follow', data => {
     addEvent(defaultUsername, {
         type: 'follow',
@@ -111,8 +104,6 @@ tiktokLiveConnection.on('follow', data => {
     });
 });
 
-// Inicializar o servidor na porta definida
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Acesse http://localhost:${PORT} no seu navegador para testar.`);
 });
