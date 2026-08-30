@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
         <p>Endpoints disponíveis:</p>
         <ul>
             <li><code>/events?user=seuUsuario</code> - Usado pelo Roblox para buscar eventos.</li>
-            <li><code>/simulate?user=seuUsuario&type=follow&name=Viewer1</code> - Usado para testar eventos.</li>
+            <li><code>/simulate?user=seuUsuario&type=gift&name=Viewer1&details=Rosa</code> - Usado para testar eventos.</li>
         </ul>
     `);
 });
@@ -52,11 +52,12 @@ app.get('/simulate', (req, res) => {
     addEvent(username, {
         type: type,
         user: name,
-        details: details,
+        gift: details,        // Garante que o Roblox identifique o nome do presente via 'event.gift'
+        details: details,     // Mantém detalhes por compatibilidade
         timestamp: Date.now()
     });
 
-    res.send(`Evento simulado com sucesso para [${username}]! Tipo: ${type} | Usuário: ${name}`);
+    res.send(`Evento simulado com sucesso para [${username}]! Tipo: ${type} | Presente: ${details} | Usuário: ${name}`);
 });
 
 // ==========================================
@@ -89,6 +90,7 @@ try {
                 addEvent(defaultUsername, {
                     type: 'gift',
                     user: data.uniqueId,
+                    gift: data.giftName,
                     details: data.giftName,
                     diamondCount: data.diamondCount * data.repeatCount
                 });
