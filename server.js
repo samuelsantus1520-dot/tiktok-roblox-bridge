@@ -31,7 +31,7 @@ const giftMapping = {
     "donut": "rosquinha",
     "doughnut": "rosquinha",
     "capivara": "capivara",
-    "capybara": "capivara",
+    "capybara": "capybara",
     "bone": "bone",
     "cap": "bone",
     "chapeu": "chapeu",
@@ -107,6 +107,11 @@ function setupUserConnection(username) {
         }
     });
 }
+
+// ROTA RAIZ (Para o UptimeRobot monitorar e dar Status Verde 200 OK)
+app.get('/', (req, res) => {
+    res.status(200).send('TikTok Roblox Bridge está online e funcionando!');
+});
 
 // 3. ENDPOINT DINÂMICO PARA O ROBLOX BUSCAR OS EVENTOS
 app.get('/events', (req, res) => {
