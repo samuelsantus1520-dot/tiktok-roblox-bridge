@@ -6,11 +6,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-const activeConnections = {};
+const defaultUsername = "souosam25";
 const eventQueues = {};
-const recentGlobalGifts = {}; // Trava global estrita por tipo de presente (bloqueia ecos em menos de 3s)
+eventQueues[defaultUsername] = [];
 
-// Mapeia variações para a chave exata
+// Mapeia qualquer variação (Inglês/Português) para a chave exata que o Roblox espera
 const giftMapping = {
     "rosa": "rosa",
     "rose": "rosa",
@@ -35,100 +35,71 @@ function normalizeGiftName(name) {
     return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
-function getOrConnectStreamer(username) {
-    if (!username) return null;
-    if (activeConnections[username]) return eventQueues[username];
+console.log(`[TikTok Bridge] Conectando ao canal de: @${defaultUsername}`);
+const tiktokLiveConnection = new TikTokLiveConnection(defaultUsername, {});
 
-    console.log(`[TikTok Bridge] Conectando ao canal de: @${username}`);
-    const tiktokLiveConnection = new TikTokLiveConnection(username, {});
-    eventQueues[username] = [];
+tiktokLiveConnection.connect().then(state => {
+    console.log(`[TikTok Bridge] Conectado com sucesso à sala (ID: ${state.roomId})`);
+}).catch(err => {
+    console.error(`[TikTok Bridge] Erro ao conectar:`, err.message);
+});
 
-    tiktokLiveConnection.connect().then(state => {
-        console.log(`[TikTok Bridge] Conectado com sucesso à sala de @${username} (ID: ${state.roomId})`);
-    }).catch(err => {
-        console.error(`[TikTok Bridge] Erro ao conectar em @${username}:`, err.message);
-    });
+// Cooldown de segurança por Usuário + Presente
+const recentGifts = {};
 
-    // --- EVENTO DE PRESENTE COM TRAVA GLOBAL ANTI-DUPLICAÇÃO ---
-    tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
-        if (data.repeatEnd === false) return;
+tiktokLiveConnection.on(WebcastEvent.GIFT, data => {
+    // 🛑 FILTRO ANTI-DUPLICAÇÃO DE STREAK: Ignora pacotes intermediários do TikTok, processando apenas o final do envio
+    if (data.repeatEnd === false) {
+        return;
+    }
 
-        const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
-        const cleanName = normalizeGiftName(rawGiftName);
-        const mappedGift = giftMapping[cleanName];
+    const rawGiftName = data.giftName || (data.gift && data.gift.name) || "";
+    const userName = data.uniqueId || data.userId || data.nickname || "Viewer";
+    const cleanName = normalizeGiftName(rawGiftName);
 
-        if (!mappedGift) {
-            console.log(`[${username}][DEBUG] Não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
-            return;
-        }
+    // Chave única para o usuário + presente
+    const giftKey = `${userName}_${cleanName}`;
+    const now = Date.now();
 
-        // TRAVA GLOBAL: Se o mesmo presente chegou há menos de 3 segundos, o eco do TikTok é descartado na hora
-        const giftKey = `${username}_${mappedGift}`;
-        const now = Date.now();
-        if (recentGlobalGifts[giftKey] && (now - recentGlobalGifts[giftKey] < 3000)) {
-            return; 
-        }
-        recentGlobalGifts[giftKey] = now;
+    // Cooldown rigoroso de 2.5 segundos para evitar qualquer disparo duplo consecutivo
+    if (recentGifts[giftKey] && (now - recentGifts[giftKey] < 2500)) {
+        return; 
+    }
+    recentGifts[giftKey] = now;
 
-        const userName = data.uniqueId || data.nickname || "Viewer";
+    // Traduz para o padrão que o Roblox entende
+    const mappedGift = giftMapping[cleanName];
 
-        console.log(`[${username}][ANIME] Presente único processado: "${rawGiftName}" -> "${mappedGift}" (${userName})`);
-        eventQueues[username].push({ 
+    if (mappedGift) {
+        console.log(`[ANIME] Presente único processado: "${rawGiftName}" -> Roblox: "${mappedGift}" (Enviado por: ${userName})`);
+        eventQueues[defaultUsername].push({ 
             type: 'gift', 
             user: userName, 
             gift: mappedGift, 
-            giftName: mappedGift,
-            timestamp: now
+            giftName: mappedGift 
         });
-    });
+    } else {
+        console.log(`[DEBUG] Presente não mapeado: "${rawGiftName}" (limpo: "${cleanName}")`);
+    }
+});
 
-    // --- EVENTO DE SEGUIDOR (COM LOG DE DEPURAÇÃO SOCIAL) ---
-    const handleFollowEvent = (data) => {
-        const userName = data.uniqueId || data.nickname || "Novo Seguidor";
-        
-        const followKey = `${username}_follow_${userName}`;
-        const now = Date.now();
-        if (recentGlobalGifts[followKey] && (now - recentGlobalGifts[followKey] < 5000)) {
-            return;
-        }
-        recentGlobalGifts[followKey] = now;
-
-        console.log(`[${username}][FOLLOW] Novo Seguidor detectado: ${userName}`);
-        eventQueues[username].push({ 
+// EVENTO DE SEGUIDOR (FOLLOW) - Mantido funcional como estava
+tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
+    if (data.displayType && data.displayType.includes('follow')) {
+        const userName = data.uniqueId || "Viewer";
+        console.log(`[FOLLOW] Novo seguidor detectado: ${userName}`);
+        eventQueues[defaultUsername].push({ 
             type: 'follow', 
-            user: userName,
-            timestamp: now
+            user: userName 
         });
-    };
-
-    tiktokLiveConnection.on(WebcastEvent.FOLLOW, handleFollowEvent);
-    
-    tiktokLiveConnection.on(WebcastEvent.SOCIAL, data => {
-        // Mostra nos logs do Render o que o TikTok envia no Social para diagnosticarmos o Follow
-        console.log(`[${username}][SOCIAL EVENT DEBUG]`, JSON.stringify(data));
-        
-        const displayType = (data.displayType || "").toLowerCase();
-        if (displayType.includes('follow') || displayType.includes('share') || data.actionId === '3') {
-            handleFollowEvent(data);
-        }
-    });
-
-    activeConnections[username] = tiktokLiveConnection;
-    return eventQueues[username];
-}
+    }
+});
 
 app.get('/events', (req, res) => {
-    const username = (req.query.user || "souosam25").toLowerCase().replace(/^@/, "");
-    const queue = getOrConnectStreamer(username);
-    if (!queue) return res.json({ events: [] });
-
-    res.json({ events: queue });
-    eventQueues[username] = [];
+    res.json({ events: eventQueues[defaultUsername] });
+    eventQueues[defaultUsername] = [];
 });
 
 app.listen(PORT, () => {
-    console.log(`\n========================================`);
-    console.log(`[Bridge Server] Rodando na nuvem na porta ${PORT}`);
-    console.log(`========================================\n`);
-    getOrConnectStreamer("souosam25");
+    console.log(`[Bridge Server] Rodando na porta ${PORT} para @${defaultUsername}`);
 });
