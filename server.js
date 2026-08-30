@@ -10,7 +10,7 @@ const eventQueues = {};
 const defaultUsername = 'souosam25'; // Seu usuário padrão
 
 // Lista única de streamers que o bot vai conectar simultaneamente (O seu e o do seu cliente)
-const streamersParaConectar = [defaultUsername, 'Maozinha05'];
+const streamersParaConectar = [defaultUsername, 'maozinha_05'];
 
 function addEvent(username, eventData) {
     const userKey = username || defaultUsername;
