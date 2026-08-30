@@ -1,5 +1,9 @@
 const express = require('express');
-const WebcastPushConnection = require('tiktok-live-connector');
+
+// Carregamento seguro para evitar o erro de construtor no Node.js e no Render
+const tiktokModule = require('tiktok-live-connector');
+const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default?.WebcastPushConnection || tiktokModule;
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
