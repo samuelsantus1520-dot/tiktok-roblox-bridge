@@ -9,9 +9,8 @@ app.use(express.urlencoded({ extended: true }));
 const eventQueues = {};
 const defaultUsername = 'souosam25'; // Seu usuário padrão
 
-// Lista de streamers que o bot vai conectar simultaneamente (O seu e o do seu cliente)
-// DICA: Altere 'nome_do_cliente_aqui' para o @ real do TikTok do seu cliente
-const streamersParaConectar = [defaultUsername, 'nome_do_cliente_aqui'];
+// Lista única de streamers que o bot vai conectar simultaneamente (O seu e o do seu cliente)
+const streamersParaConectar = [defaultUsername, 'Maozinha05'];
 
 function addEvent(username, eventData) {
     const userKey = username || defaultUsername;
