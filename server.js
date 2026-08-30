@@ -1,5 +1,5 @@
 const express = require('express');
-const { WebcastPushConnection } = require('tiktok-live-connector');
+const WebcastPushConnection = require('tiktok-live-connector');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
