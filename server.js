@@ -1,9 +1,4 @@
 const express = require('express');
-
-// Correção definitiva para extrair a classe corretamente no Node.js moderno
-const tiktokModule = require('tiktok-live-connector');
-const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default || tiktokModule;
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -65,44 +60,56 @@ app.get('/simulate', (req, res) => {
 });
 
 // ==========================================
-// CONEXÃO COM O TIKTOK LIVE
+// CONEXÃO SEGURA COM O TIKTOK LIVE
 // ==========================================
 
-const tiktokLiveConnection = new WebcastPushConnection(defaultUsername);
+try {
+    const tiktokModule = require('tiktok-live-connector');
+    const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default || tiktokModule;
 
-tiktokLiveConnection.connect().then(state => {
-    console.info(`[TikTok] Conectado com sucesso à live de @${state.roomInfo.owner.uniqueId}`);
-}).catch(err => {
-    console.error('[TikTok] Erro ao conectar na live (você ainda pode usar o /simulate se estiver offline):', err);
-});
+    if (typeof WebcastPushConnection === 'function') {
+        const tiktokLiveConnection = new WebcastPushConnection(defaultUsername);
 
-tiktokLiveConnection.on('chat', data => {
-    addEvent(defaultUsername, {
-        type: 'chat',
-        user: data.uniqueId,
-        details: data.comment
-    });
-});
-
-tiktokLiveConnection.on('gift', data => {
-    if (data.giftType === 1 || data.repeatEnd) {
-        addEvent(defaultUsername, {
-            type: 'gift',
-            user: data.uniqueId,
-            details: data.giftName,
-            diamondCount: data.diamondCount * data.repeatCount
+        tiktokLiveConnection.connect().then(state => {
+            console.info(`[TikTok] Conectado com sucesso à live de @${state.roomInfo.owner.uniqueId}`);
+        }).catch(err => {
+            console.error('[TikTok] Erro ao conectar na live:', err);
         });
+
+        tiktokLiveConnection.on('chat', data => {
+            addEvent(defaultUsername, {
+                type: 'chat',
+                user: data.uniqueId,
+                details: data.comment
+            });
+        });
+
+        tiktokLiveConnection.on('gift', data => {
+            if (data.giftType === 1 || data.repeatEnd) {
+                addEvent(defaultUsername, {
+                    type: 'gift',
+                    user: data.uniqueId,
+                    details: data.giftName,
+                    diamondCount: data.diamondCount * data.repeatCount
+                });
+            }
+        });
+
+        tiktokLiveConnection.on('follow', data => {
+            addEvent(defaultUsername, {
+                type: 'follow',
+                user: data.uniqueId,
+                details: 'Seguiu a transmissão'
+            });
+        });
+    } else {
+        console.warn("[TikTok] WebcastPushConnection não pôde ser carregado como construtor. O modo de simulação continuará ativo.");
     }
-});
+} catch (e) {
+    console.error("[TikTok] Erro ao iniciar o módulo do TikTok. O servidor continuará rodando normalmente via /simulate.", e);
+}
 
-tiktokLiveConnection.on('follow', data => {
-    addEvent(defaultUsername, {
-        type: 'follow',
-        user: data.uniqueId,
-        details: 'Seguiu a transmissão'
-    });
-});
-
+// Inicializar o servidor
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
