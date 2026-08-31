@@ -373,67 +373,39 @@ app.get('/simulate', (req, res) => {
 
 
 // ==========================================
-
-// ROTA DE INTEGRAÇÃO COM O TIKFINITY (WEBHOOK)
-
+// ROTA DE WEBHOOK DINÂMICA (PARA O TIKFINITY DE CADA STREAMER)
 // ==========================================
 
-
-
 app.post('/webhook', (req, res) => {
-
     const body = req.body;
-
     
-
-    // O TikFinity costuma enviar o identificador do streamer ou você pode direcionar para o padrão
-
-    const username = cleanUsername(body.uniqueId || body.author || 'souosam25');
-
+    // Pega o usuário direto da URL do webhook (ex: /webhook?user=maozinha_05) 
+    // ou tenta achar no corpo enviado pelo TikFinity
+    const username = cleanUsername(req.query.user || body.uniqueId || body.author || 'souosam25');
     const eventType = body.event || body.type;
-
     
-
-    // Tratando eventos de Presente (Gift) ou Seguir (Follow) vindos do TikFinity
-
+    // Tratando Presente (Gift)
     if (eventType === 'gift' || body.giftName) {
-
         addEvent(username, {
-
             type: 'gift',
-
             user: body.uniqueId || body.username || 'Espectador',
-
             gift: body.giftName || 'Presente',
-
             details: body.giftName || 'Presente',
-
             timestamp: Date.now()
-
         });
-
-    } else if (eventType === 'follow' || body.action === 'follow') {
-
+    } 
+    // Tratando Seguidor (Follow)
+    else if (eventType === 'follow' || body.action === 'follow') {
         addEvent(username, {
-
             type: 'follow',
-
             user: body.uniqueId || body.username || 'Espectador',
-
             details: 'Seguiu a transmissão',
-
             timestamp: Date.now()
-
         });
-
     }
 
-
-
     res.status(200).send({ status: 'success' });
-
 });
-
 
 
 // ==========================================
