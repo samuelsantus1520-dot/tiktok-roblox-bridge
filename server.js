@@ -9,11 +9,17 @@ app.use(express.urlencoded({ extended: true }));
 const eventQueues = {};
 const defaultUsername = 'souosam25'; // Seu usuário padrão
 
-// Lista única de streamers que o bot vai conectar simultaneamente (O seu e o do seu cliente)
+// Lista única de streamers que o bot vai conectar simultaneamente
 const streamersParaConectar = [defaultUsername, 'maozinha_05'];
 
+// Função auxiliar para padronizar e limpar o nome de usuário (remove '@' e espaços)
+function cleanUsername(username) {
+    if (!username) return defaultUsername;
+    return username.toString().replace(/^@/, '').trim();
+}
+
 function addEvent(username, eventData) {
-    const userKey = username || defaultUsername;
+    const userKey = cleanUsername(username);
     if (!eventQueues[userKey]) {
         eventQueues[userKey] = [];
     }
@@ -21,7 +27,7 @@ function addEvent(username, eventData) {
 }
 
 // ==========================================
-// PAINEL VISUAL DE CONTROLE (PARA GRAVAR VÍDEO)
+// PAINEL VISUAL DE CONTROLE
 // ==========================================
 
 app.get('/', (req, res) => {
@@ -103,11 +109,11 @@ app.get('/', (req, res) => {
         <body>
             <div class="container">
                 <h1>🎮 Painel TikTok to Roblox</h1>
-                <p>Clique nos botões abaixo para simular os eventos em tempo real no seu jogo!</p>
+                <p>Simule eventos em tempo real para qualquer streamer!</p>
                 
                 <div class="input-group">
-                    <label>Seu Usuário do TikTok (no Roblox):</label>
-                    <input type="text" id="streamer" value="souosam25">
+                    <label>Usuário do TikTok (Ex: maozinha_05 ou @souosam25):</label>
+                    <input type="text" id="streamer" value="maozinha_05">
                 </div>
                 
                 <div class="input-group">
@@ -139,7 +145,7 @@ app.get('/', (req, res) => {
                     fetch(url)
                         .then(response => response.text())
                         .then(data => {
-                            document.getElementById('log').innerText = "✅ Sucesso! Enviado: [" + details + "] de " + name;
+                            document.getElementById('log').innerText = "✅ Sucesso! Enviado para [" + user + "] -> " + details;
                         })
                         .catch(err => {
                             document.getElementById('log').innerText = "❌ Erro ao enviar o evento!";
@@ -152,7 +158,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/events', (req, res) => {
-    const username = req.query.user || defaultUsername;
+    const username = cleanUsername(req.query.user);
     
     if (!eventQueues[username]) {
         eventQueues[username] = [];
@@ -163,7 +169,7 @@ app.get('/events', (req, res) => {
 });
 
 app.get('/simulate', (req, res) => {
-    const username = req.query.user || defaultUsername;
+    const username = cleanUsername(req.query.user);
     const type = req.query.type || 'follow';
     const name = req.query.name || 'ViewerTeste';
     const details = req.query.details || 'Rosa';
@@ -183,7 +189,8 @@ app.get('/simulate', (req, res) => {
 // CONEXÃO MULTI-STREAMER COM O TIKTOK LIVE
 // ==========================================
 
-function iniciarConexaoTikTok(username) {
+function iniciarConexaoTikTok(rawUsername) {
+    const username = cleanUsername(rawUsername);
     try {
         const tiktokModule = require('tiktok-live-connector');
         const WebcastPushConnection = tiktokModule.WebcastPushConnection || tiktokModule.default || tiktokModule;
@@ -225,23 +232,21 @@ function iniciarConexaoTikTok(username) {
                 });
             });
         } else {
-            console.warn(`[TikTok] WebcastPushConnection não pôde ser carregado como construtor para @${username}. O modo de simulação continuará ativo.`);
+            console.warn(`[TikTok] WebcastPushConnection não pôde ser carregado para @${username}.`);
         }
     } catch (e) {
-        console.error(`[TikTok] Erro ao iniciar o módulo do TikTok para @${username}. O servidor continuará rodando normalmente via /simulate.`, e);
+        console.error(`[TikTok] Erro ao iniciar módulo para @${username}.`, e);
     }
 }
 
-// Inicia a conexão para cada streamer da lista com atraso escalonado (1 segundo entre cada)
 streamersParaConectar.forEach((username, index) => {
     const atraso = index * 1000; 
     setTimeout(() => {
-        console.log(`[Sistema] Iniciando monitoramento para: @${username}`);
+        console.log(`[Sistema] Iniciando monitoramento para: @${cleanUsername(username)}`);
         iniciarConexaoTikTok(username);
     }, atraso);
 });
 
-// Inicializar o servidor
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
